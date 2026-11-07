@@ -1,0 +1,7 @@
+Flask>=3.0,<4
+Flask-SQLAlchemy>=3.1,<4
+python-dotenv>=1.0,<2
+requests>=2.31,<3
+scikit-learn>=1.4,<2
+pytest>=8,<9
+hindsight-client>=1.2,<2
