@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 from models import Incident, PostMortem, db
 from services.ai_service import _validate, analyze
 from services.incident_memory import retrieve_similar
@@ -8,6 +9,13 @@ from services.log_analyzer import parse_logs
 def test_startup_database_and_dashboard(client):
     assert client.get("/health").json["ok"] is True
     assert b"TOTAL INCIDENTS" in client.get("/").data
+
+
+def test_session_security_defaults(app):
+    assert len(app.config["SECRET_KEY"]) >= 32
+    assert app.config["SECRET_KEY"] != "local-demo-change-me"
+    assert app.config["SESSION_COOKIE_HTTPONLY"] is True
+    assert app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
 
 
 def test_text_json_and_otel_log_ingestion():
@@ -29,29 +37,79 @@ def test_incident_analysis_feedback_resolution_and_persistent_memory(client, app
     assert incident is not None
     feedback = client.post(f"/incidents/{incident.id}/feedback", data={"hypothesis": "Connections are exhausted", "verdict": "confirmed", "notes": "verified metrics"})
     assert feedback.status_code == 302
-    pm = {"confirmed_root_cause": "Long-running queries consumed all pool slots.", "actual_resolution": "Reviewed sessions and cleared confirmed stuck queries.", "recovery_outcome": "Pool wait returned to baseline.", "lessons_learned": "Watch pool wait time."}
+    pm = {"confirmed_root_cause": "Long-running queries consumed all pool slots.", "actual_resolution": "Reviewed sessions and cleared confirmed stuck queries.", "recovery_outcome": "Pool wait returned to baseline.", "lessons_learned": "Watch pool wait time.", "verification_confirmed": "1"}
     assert client.post(f"/incidents/{incident.id}/postmortem", data=pm).status_code == 302
     with app.app_context():
-        resolved = Incident.query.get(incident.id)
+        resolved = db.session.get(Incident, incident.id)
         assert resolved.status == "Resolved" and resolved.postmortem
         match = retrieve_similar("billing database pool acquire timeout", [resolved])
         assert match and match[0]["score"] > 0
         old_id = resolved.id
     restart = __import__("app").create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": app.config["SQLALCHEMY_DATABASE_URI"], "GROQ_API_KEY": ""})
     with restart.app_context():
-        restored = Incident.query.get(old_id)
+        restored = db.session.get(Incident, old_id)
         assert restored.postmortem.actual_resolution == pm["actual_resolution"]
 
 
-def test_demo_seed_and_safe_reset(client, app):
+def test_demo_seed_and_safe_reset(client, app, monkeypatch):
+    from routes import incidents as incident_routes
+
+    def forbidden_external_call(*args, **kwargs):
+        raise AssertionError("demo seed/reset must not call Hindsight")
+
+    monkeypatch.setattr(incident_routes, "retain_incident", forbidden_external_call)
+    monkeypatch.setattr(incident_routes, "recall_incidents", forbidden_external_call)
     client.post("/demo/seed")
     with app.app_context():
         assert Incident.query.filter_by(is_demo=True).count() >= 4
+        from models import Runbook
+        db.session.add(Runbook(title="Real runbook", service="payments", is_demo=False))
+        db.session.commit()
     client.post("/incidents/", data={"logs": "ERROR service=real something broke"})
     client.post("/demo/reset")
     with app.app_context():
         assert Incident.query.filter_by(is_demo=True).count() == 0
         assert Incident.query.filter_by(is_demo=False).count() == 1
+        assert Runbook.query.filter_by(title="Real runbook").count() == 1
+
+
+def test_navigation_pages_render_and_incident_replay(client, app):
+    response = client.post(
+        "/incidents/",
+        data={"title": "Route smoke incident", "logs": "ERROR service=api request timed out"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        incident_id = Incident.query.filter_by(title="Route smoke incident").one().id
+
+    for path in ("/", "/incidents/new", "/incidents/history", "/incidents/postmortems", "/runbooks/"):
+        assert client.get(path).status_code == 200, path
+    assert client.get(f"/incidents/{incident_id}").status_code == 200
+    assert client.get(f"/incidents/replay/{incident_id}").status_code == 200
+
+
+def test_upload_rejects_unknown_extension_without_creating_incident(client, app):
+    response = client.post(
+        "/incidents/",
+        data={"file": (BytesIO(b"ERROR service=api failed"), "payload.exe")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert b"Use a .log, .txt or .json file." in response.data
+    with app.app_context():
+        assert Incident.query.count() == 0
+
+
+def test_oversized_upload_uses_safe_error_page(client):
+    response = client.post(
+        "/incidents/",
+        data={"file": (BytesIO(b"x" * (2 * 1024 * 1024 + 100)), "large.log")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert b"Upload is larger than the 2 MB limit." in response.data
 
 
 def test_local_analysis_is_validated_without_network():
@@ -68,13 +126,14 @@ def test_invalid_ai_structure_is_rejected():
         _validate({"suspected_causes": "not a list"})
 
 
-def test_api_failure_falls_back_explicitly(monkeypatch):
+def test_api_failure_falls_back_explicitly(monkeypatch, caplog):
     import requests
     from services import ai_service
     monkeypatch.setattr(ai_service.requests, "post", lambda *args, **kwargs: (_ for _ in ()).throw(requests.Timeout()))
     result, source = ai_service.analyze(parse_logs("ERROR service=api gateway timeout"), [], {"GROQ_API_KEY": "configured", "GROQ_MODEL": "test", "MAX_CONTEXT_CHARS": 1000, "MAX_COMPLETION_TOKENS": 20})
     assert source == "local_fallback"
     assert result["suspected_causes"]
+    assert "using local fallback (Timeout)" in caplog.text
 
 
 

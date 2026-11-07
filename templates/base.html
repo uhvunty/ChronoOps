@@ -10,6 +10,6 @@
 <a class="nav {% if request.endpoint=='incidents.history' %}active{% endif %}" href="/incidents/history">◷ <span>Historical intelligence</span></a>
 <a class="nav {% if request.endpoint=='incidents.postmortems' %}active{% endif %}" href="/incidents/postmortems">▧ <span>Post-mortem reports</span></a>
 <a class="nav {% if request.endpoint=='runbooks.index' %}active{% endif %}" href="/runbooks/">▤ <span>Runbook library</span></a>
-<div class="side-bottom"><span class="status-dot"></span> SQLite memory active <small>Persistent local storage</small></div></aside>
-<main class="main"><header class="topbar"><div class="crumb">OPERATIONS <span>/</span> {% block crumb %}Command center{% endblock %}</div><div class="topright"><span class="live"><i></i> SYSTEMS NOMINAL</span><span class="avatar">OP</span></div></header>
+<div class="side-bottom">LOCAL INCIDENT STORE <small>SQLite persistent storage</small></div></aside>
+<main class="main"><header class="topbar"><div class="crumb">OPERATIONS <span>/</span> {% block crumb %}Command center{% endblock %}</div><div class="topright"><span class="live">INCIDENT RESPONSE</span><span class="avatar">OP</span></div></header>
 <div class="content">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}{% block content %}{% endblock %}</div></main></body></html>

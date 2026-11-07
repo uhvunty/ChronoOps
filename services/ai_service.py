@@ -1,8 +1,10 @@
 import json
 import re
 import time
+import logging
 import requests
 
+logger = logging.getLogger(__name__)
 
 def fallback_analysis(parsed, hindsight_memories=None):
     evidence = parsed["evidence"].splitlines()
@@ -81,7 +83,10 @@ def analyze(parsed, matches, config, hindsight_memories=None):
             content = res.json()["choices"][0]["message"]["content"]
             data = json.loads(re.sub(r"^```(?:json)?|```$", "", content.strip(), flags=re.I))
             return _validate(data), "groq"
-        except (requests.RequestException, ValueError, KeyError, TypeError, IndexError):
+        except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as exc:
             if attempt == 1:
+                # Log a safe diagnostic category without dumping prompts,
+                # API responses, or credentials into application logs.
+                logger.warning("Groq analysis failed; using local fallback (%s)", type(exc).__name__)
                 break
     return fallback, "local_fallback"
