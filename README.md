@@ -1,21 +1,29 @@
-# Chronoops — Incident Intelligence
+# ChronoOps — AI-Powered Incident Response Agent
 
-Chronoops is a Flask incident response workspace with persistent SQLite memory, evidence-grounded investigation, TF-IDF similarity retrieval, runbooks, replay timelines and post-mortems.
+**ChronoOps** is an AI-powered incident response platform that helps engineering teams investigate production incidents, identify potential root causes, recommend recovery actions, and preserve verified operational knowledge for future incidents.
 
-## Run locally
+Unlike a conventional incident analysis tool, ChronoOps uses **Hindsight** as its long-term memory layer. It retains verified postmortems and recalls relevant past incidents during new investigations, allowing the system to use previously learned operational knowledge rather than treating every incident as an isolated event.
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.example .env
-flask --app app run --debug
-```
+## The Problem
 
-Open http://127.0.0.1:5000. A Groq key is optional; the app clearly labels deterministic local fallback analyses. `python -m pytest` runs the offline workflow tests.
+Production incidents often repeat in different forms. Engineering teams spend valuable time investigating issues that have already occurred because:
 
-## Demo workflow
+- Incident knowledge is scattered across logs, documentation, and team discussions.
+- Previous fixes are not always available when a similar incident happens.
+- Root-cause investigations are repeated unnecessarily.
+- Postmortems are written but rarely used during future incidents.
 
-Load the labelled demo data, analyze a database pool incident, resolve it with a verified recovery and post-mortem, then analyze the second connectivity sample. Its resolved predecessor is retrieved from SQLite and the actual cosine similarity and previous verified recovery are shown. Demo reset removes only incidents explicitly marked as demo data.
+## Our Solution
 
-Logs are untrusted evidence. AI suggestions are hypotheses for engineer review; Chronoops never executes commands or changes production systems.
+ChronoOps combines AI-assisted incident investigation with persistent operational memory.
+
+It analyzes incident information, identifies potential causes, suggests recovery steps, and allows engineers to verify and resolve incidents through structured postmortems.
+
+The verified knowledge is retained in Hindsight. When a related incident occurs later, ChronoOps recalls relevant memories and provides them as additional context to the AI analysis.
+
+## Key Features
+
+- **AI Incident Analysis:** Analyzes incident descriptions, event information, errors, and warnings to generate investigation summaries.
+- **Root-Cause Hypotheses:** Suggests possible causes that engineers can investigate and verify.
+- **Recovery Recommendations:** Provides actionable recovery suggestions.
+- **Persistent Incident Memory
